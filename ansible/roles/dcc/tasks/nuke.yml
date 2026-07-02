@@ -1,0 +1,36 @@
+---
+- name: Fetch Nuke {{ nuke_version }} from installers bucket
+  when: aws_worker | bool
+  ansible.builtin.command: >
+    aws s3 cp
+    s3://{{ installers_bucket }}/nuke/Nuke{{ nuke_version }}-linux-x86_64.tgz
+    {{ installer_cache }}/nuke.tgz
+  args:
+    creates: /opt/Nuke{{ nuke_version }}
+
+- name: Fetch Nuke from studio file server
+  when: not (aws_worker | bool)
+  ansible.builtin.copy:
+    src: "{{ onprem_installer_path }}/nuke/Nuke{{ nuke_version }}-linux-x86_64.tgz"
+    dest: "{{ installer_cache }}/nuke.tgz"
+    remote_src: true
+
+- name: Unpack Nuke
+  ansible.builtin.unarchive:
+    src: "{{ installer_cache }}/nuke.tgz"
+    dest: "{{ installer_cache }}"
+    remote_src: true
+
+- name: Run Nuke installer
+  ansible.builtin.command: >
+    ./Nuke{{ nuke_version }}-linux-x86_64.run --accept-foundry-eula
+    --prefix=/opt --exclude-subdir=false
+  args:
+    chdir: "{{ installer_cache }}"
+    creates: /opt/Nuke{{ nuke_version }}
+
+- name: Point Nuke at the Foundry license server (over the VPN)
+  ansible.builtin.copy:
+    dest: /etc/profile.d/foundry-license.sh
+    content: 'export foundry_LICENSE="{{ foundry_license }}"'
+    mode: "0644"

@@ -1,0 +1,24 @@
+---
+# One playbook, two targets: on-prem render nodes AND the Packer AMI build.
+# Environment parity is this file plus the version manifest — if it isn't
+# here, it doesn't exist on a render node.
+#
+#   On-prem:  ansible-playbook -i inventory/ playbooks/worker.yml
+#   AMI:      invoked by packer/worker.pkr.hcl with aws_worker=true
+
+- name: Configure render worker
+  hosts: all
+  become: true
+
+  vars_files:
+    - ../group_vars/all/versions.yml
+
+  vars:
+    # Set true by the Packer build; on-prem inventories leave it false.
+    aws_worker: false
+
+  roles:
+    - common
+    - nvidia
+    - dcc
+    - deadline_worker

@@ -1,0 +1,41 @@
+---
+# Deadline 10 client in Remote mode: the worker only ever talks to the
+# on-prem RCS over the VPN — never the database or repository share.
+
+- name: Fetch Deadline client {{ deadline_version }} from installers bucket
+  when: aws_worker | bool
+  ansible.builtin.command: >
+    aws s3 cp
+    s3://{{ installers_bucket }}/deadline/DeadlineClient-{{ deadline_version }}-linux-x64-installer.run
+    /tmp/deadline-installer.run
+  args:
+    creates: /opt/Thinkbox/Deadline10
+
+- name: Fetch Deadline client from Viz file server
+  when: not (aws_worker | bool)
+  ansible.builtin.copy:
+    src: "{{ onprem_installer_path }}/deadline/DeadlineClient-{{ deadline_version }}-linux-x64-installer.run"
+    dest: /tmp/deadline-installer.run
+    remote_src: true
+
+- name: Make installer executable
+  ansible.builtin.file:
+    path: /tmp/deadline-installer.run
+    mode: "0755"
+
+- name: Install Deadline client (unattended, Remote connection to the RCS)
+  ansible.builtin.command: >
+    /tmp/deadline-installer.run --mode unattended
+    --connectiontype Remote
+    --proxyrootdir {{ rcs_host }}:{{ rcs_port }}
+    --noguimode true
+    --slavestartup true
+    --launcherdaemon true
+    --daemonuser {{ render_user }}
+  args:
+    creates: /opt/Thinkbox/Deadline10
+
+- name: Remove installer
+  ansible.builtin.file:
+    path: /tmp/deadline-installer.run
+    state: absent

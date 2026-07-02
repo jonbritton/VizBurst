@@ -1,0 +1,11 @@
+[Unit]
+Description=Format and mount instance-store scratch space
+Before=deadline10launcher.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/format-scratch
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

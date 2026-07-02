@@ -1,0 +1,46 @@
+---
+- name: Fetch Houdini {{ houdini_version }} from installers bucket
+  when: aws_worker | bool
+  ansible.builtin.command: >
+    aws s3 cp
+    s3://{{ installers_bucket }}/houdini/houdini-{{ houdini_version }}-linux_x86_64_gcc11.2.tar.gz
+    {{ installer_cache }}/houdini.tar.gz
+  args:
+    creates: /opt/hfs{{ houdini_version }}
+
+- name: Fetch Houdini from studio file server
+  when: not (aws_worker | bool)
+  ansible.builtin.copy:
+    src: "{{ onprem_installer_path }}/houdini/houdini-{{ houdini_version }}-linux_x86_64_gcc11.2.tar.gz"
+    dest: "{{ installer_cache }}/houdini.tar.gz"
+    remote_src: true
+
+- name: Unpack Houdini installer
+  ansible.builtin.unarchive:
+    src: "{{ installer_cache }}/houdini.tar.gz"
+    dest: "{{ installer_cache }}"
+    remote_src: true
+  args:
+    creates: /opt/hfs{{ houdini_version }}
+
+- name: Run Houdini installer (silent, no local license server)
+  ansible.builtin.shell: >
+    ./houdini.install --auto-install --accept-EULA 2021-10-13
+    --install-houdini --no-install-license --no-install-menus
+    --make-dir /opt/hfs{{ houdini_version }}
+  args:
+    chdir: "{{ installer_cache }}/houdini-{{ houdini_version }}-linux_x86_64_gcc11.2"
+    creates: /opt/hfs{{ houdini_version }}
+
+- name: Point hserver at the studio license server (over the VPN)
+  ansible.builtin.copy:
+    dest: /usr/lib/sesi/licenses
+    content: "serverhost={{ sidefx_license_server }}\n"
+    mode: "0644"
+
+- name: Version-stable path
+  ansible.builtin.file:
+    src: /opt/hfs{{ houdini_version }}
+    dest: /opt/hfs
+    state: link
+    force: true

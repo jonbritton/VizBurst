@@ -1,0 +1,91 @@
+name: ami-build
+
+# Builds the worker AMI with Packer + the same Ansible roles that configure
+# the on-prem nodes, then promotes it by flipping the SSM parameters the
+# launch templates resolve at boot. Deadline and Terraform are never touched.
+#
+# Triggered only when the environment definition actually changes — the AMI
+# is a function of ansible/ + packer/, nothing else.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ansible/**"
+      - "packer/**"
+      - ".github/workflows/ami-build.yaml"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # OIDC
+  contents: read
+
+concurrency:
+  group: ami-build
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-west-2
+  NAME_PREFIX: render-farm-dev
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      ami_id: ${{ steps.build.outputs.ami_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # AWS_ACCOUNT_ID is a repository variable (Settings → Secrets and
+          # variables → Actions → Variables) — keeps account identity out of code.
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/render-farm-dev-github-actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve build environment from tags
+        # Finds the public subnet and installers bucket by tag/name so the
+        # workflow never hardcodes IDs that Terraform owns.
+        run: scripts/packer_env.sh >> "$GITHUB_ENV"
+
+      - uses: hashicorp/setup-packer@v3
+
+      - name: Install Ansible (Packer provisioner)
+        run: pipx install --include-deps ansible
+
+      - name: Build AMI
+        id: build
+        env:
+          PKR_VAR_subnet_id: ${{ env.PACKER_SUBNET_ID }}
+          PKR_VAR_installers_bucket: ${{ env.INSTALLERS_BUCKET }}
+          PKR_VAR_name_prefix: ${{ env.NAME_PREFIX }}
+          PKR_VAR_region: ${{ env.AWS_REGION }}
+        run: |
+          packer init packer/
+          packer build -color=false packer/
+          ami_id=$(jq -r '.builds[-1].artifact_id | split(":")[1]' packer/packer-manifest.json)
+          echo "ami_id=$ami_id" >> "$GITHUB_OUTPUT"
+          echo "Built $ami_id"
+
+  promote:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # AWS_ACCOUNT_ID is a repository variable (Settings → Secrets and
+          # variables → Actions → Variables) — keeps account identity out of code.
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/render-farm-dev-github-actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Promote AMI to launch-template parameters
+        # Single image serves both fleets for now: the NVIDIA driver idles
+        # harmlessly on CPU instances. Split into two builds if that changes.
+        run: scripts/promote_ami.sh "${{ needs.build.outputs.ami_id }}" cpu gpu
+
+      - name: Prune old AMIs (keep last 3)
+        run: scripts/prune_amis.sh 3

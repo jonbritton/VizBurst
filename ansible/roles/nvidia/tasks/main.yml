@@ -1,0 +1,11 @@
+---
+# Pinned NVIDIA driver from the Ubuntu -server series. Installs cleanly on
+# non-GPU build instances (DKMS compiles; the module just never loads), so
+# one AMI serves both the CPU and GPU fleets.
+
+- name: Install pinned NVIDIA server driver
+  ansible.builtin.apt:
+    name:
+      - "nvidia-driver-{{ nvidia_driver_version }}-server"
+      - "nvidia-utils-{{ nvidia_driver_version }}-server"
+    state: present
