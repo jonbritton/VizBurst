@@ -22,23 +22,21 @@ Built to interface with the Viz Studio's render farm and GPU cluster and AWS.
 ## Architecture
 
 - **Deadline** owns render scheduling, on-prem and in-cloud. The existing on-prem Repository remains the single source of truth for jobs, workers, and licensing.
-- **Deadline's Spot Event Plugin** scales the AWS side: it watches the queue and launches/terminates EC2 Spot instances that register as ordinary Deadline Workers. When the queue drains, the fleet drains to zero.
-- **An AWS Site-to-Site VPN** is the only bridge between the studio and AWS. Cloud workers reach the Deadline Remote Connection Server *and* the on-prem license servers over private routing — no exposed ports, no client-certificate infrastructure, no baked-in secrets.
-- **EC2 Spot instances from a pre-baked AMI** run the render environment directly — no Kubernetes, no per-node container runtime. The AMI is built by the same Ansible playbooks that configure the on-prem workers (see "Environment parity" below).
-- **S3** is the transfer lane for assets in and frames out, kept fast by delta-syncing a content-addressed asset library rather than uploading per shot (see "Moving files" below).
+- **EC2 Spot instances from a pre-baked AMI** run the render environment directly. The AMI is built by the same Ansible playbooks that configure the on-prem workers.
+- **S3** is the transfer lane for assets in and frames out, kept fast by delta-syncing a content-addressed asset library.
 - **Terraform** provisions the AWS footprint (VPC, VPN, security groups, IAM, S3, endpoints) as reusable modules.
 - **GitHub Actions** lints, tests, and validates Terraform, and builds/promotes the worker AMI — authenticating to AWS via OIDC, no long-lived keys.
 
 
 ## Moving files: on-prem ⇄ AWS
 
-Renders need scene files and assets going out, and finished frames coming back. The design principle: **the studio uplink is the bottleneck, so never send the same byte twice.**
+Renders need scene files and assets going out, and finished frames coming back. The design principle: **the uplink is the bottleneck, so never send the same byte twice.**
 
 **Outbound (assets to AWS):**
-1. The S3 assets bucket is treated as a **continuously-synced, content-addressed asset library**, not a per-shot drop zone. A manifest of file hashes is computed at publish/submit time and only objects S3 doesn't already have are uploaded. Shots in a sequence share most of their assets, so a show's first big upload happens once; subsequent shots sync gigabytes, not hundreds.
+1. The S3 assets bucket is treated as a **continuously-synced, content-addressed asset library**. A manifest of file hashes is computed at publish/submit time and only objects S3 doesn't already have are uploaded. Shots in a sequence share most of their assets, so a show's first big upload happens once; subsequent shots sync a little subset.
 2. The sync runs as a **Deadline job the render job depends on**, so upload overlaps with queue wait and Spot fleet spin-up instead of preceding them.
 3. Uploads use high-concurrency multipart transfer (s5cmd/rclone-class tooling), with many-small-file asset sets packed into archives — single-stream copies won't saturate the link, especially on texture-heavy shots.
-4. Cloud workers pull assets from S3 to **local NVMe instance storage** at task start via a **VPC gateway endpoint** (no public internet, no NAT charges, no per-GB cost same-region). The local cache is keyed to the manifest hash, so an instance rendering ten tasks of one shot downloads once.
+4. Cloud workers pull assets from S3 to **local NVMe instance storage** at task start via a **VPC gateway endpoint** (no public internet! no money down!) The local cache is keyed to the manifest hash, so an instance rendering ten tasks of one shot downloads once.
 
 **Inbound (frames back on-prem):**
 1. Workers write finished frames to an S3 output bucket as tasks complete.
@@ -49,16 +47,15 @@ Renders need scene files and assets going out, and finished frames coming back. 
 **Cost/management controls:**
 - **Lifecycle rules** expire delivered frames from S3 after a short window, and asset-library objects a show no longer references get pruned at wrap. The buckets are a transfer lane and working set — the on-prem file server remains the system of record.
 - Inbound frame downloads are S3 egress, the main variable cost; it scales directly with rendered output and is only incurred when rendering in the cloud.
-- No always-on file gateway, no replicated filesystem in the default path: the moving parts are two buckets and two sync scripts.
+- No always-on file gateway, no replicated filesystem in the default path: the "moving parts" are two buckets and two sync scripts.
 
 
 ## Environment parity: keeping the AMI and local renderers in lockstep
 
-With Docker gone, parity is enforced by the build process instead of an artifact: **one Ansible playbook, two targets.**
+**one Ansible playbook, two targets.**
 
-- All render-environment configuration lives in the `ansible/` roles, with every version that matters — DCC builds, renderer versions, Deadline client, GPU driver — pinned in a **single version manifest** (vars file). "The environment" is defined as *a git commit of the playbooks plus the manifest*. Corollary discipline: nobody hand-installs anything on a render node; if it isn't in the playbook, it doesn't exist.
-- **Packer builds the AMI** by booting a temporary EC2 instance, running that same playbook against it, and snapshotting. The build runs in GitHub Actions (existing OIDC role), triggered **only when the playbooks or manifest change** — not on a schedule. A build is ~30–60 minutes of one instance's time.
-- **Validation before promotion:** the pipeline boots an instance from the candidate AMI, lets it register with Deadline over the VPN into a quarantined worker group, renders a reference scene, and checks the output. Only on success is the image promoted.
+- All render-environment configuration lives in the `ansible/` roles, with every version that matters — DCC builds, renderer versions, Deadline client, GPU driver — pinned in a **single version manifest** (vars file). "The environment" is defined as *a git commit of the playbooks plus the manifest*. Corollary discipline: nobody hand-installs anything on a render node.
+- **Packer builds the AMI** by booting a temporary EC2 instance, running that same playbook against it, and snapshotting. The build runs in GitHub Actions (existing OIDC role), triggered **only when the playbooks or manifest change** — not on a schedule. A build is ~30-60 minutes of one instance's time.
 - **Promotion without touching Deadline:** the Spot Event Plugin's fleet definitions reference an EC2 **launch template**; promotion just sets the new AMI as the template's default version, and the next fleet launches on it automatically. The AMI ID is also published to an SSM parameter, making rollback a one-line pointer flip.
 - **On-prem stays on the same commit:** the merge that feeds Packer also applies the playbook to the on-prem nodes over the studio network, and a periodic `ansible-playbook --check` run flags any node that has drifted between rollouts.
 
