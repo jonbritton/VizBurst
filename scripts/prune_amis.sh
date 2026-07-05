@@ -27,7 +27,9 @@ for ami in "${old_amis[@]}"; do
   echo "Deregistering ${ami}"
   aws ec2 deregister-image --image-id "$ami"
   for snap in "${snapshots[@]}"; do
-    [ -n "$snap" ] && [ "$snap" != "None" ] || continue
+    if [ -z "$snap" ] || [ "$snap" = "None" ]; then
+      continue
+    fi
     echo "  deleting ${snap}"
     aws ec2 delete-snapshot --snapshot-id "$snap"
   done
