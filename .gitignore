@@ -1,0 +1,151 @@
+# =============================================================================
+# CREDENTIALS & SECRETS — never commit these
+# =============================================================================
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+secrets.yml
+secrets.yaml
+secrets.json
+.env
+.env.*
+!.env.example
+
+# Jon's Generic nothankyous
+pri/
+private/
+claude/
+.claude/
+.sec/
+
+
+# AWS credentials
+.aws/
+aws_credentials
+credentials.json
+
+# Ansible Vault password files
+.vault_pass
+.vault_password
+vault_pass.txt
+
+# SSH keys
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+
+# =============================================================================
+# TERRAFORM
+# =============================================================================
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+*.tfvars
+!example.tfvars
+!terraform.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# =============================================================================
+# DOCKER
+# =============================================================================
+.docker/
+docker-compose.override.yml
+*.env.docker
+
+
+# =============================================================================
+# ANSIBLE
+# =============================================================================
+*.retry
+inventory/host_vars/
+inventory/group_vars/
+!inventory/group_vars/all/
+roles/external/
+collections/
+
+
+# =============================================================================
+# PYTHON / PIP
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+eggs/
+*.egg-info/
+*.egg
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.whl
+.installed.cfg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.virtualenv/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# mypy / type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# pyright
+pyrightconfig.json
+
+
+# =============================================================================
+# OS & EDITOR
+# =============================================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.direnv/
+orig.gitignore
+out/
+scenes/
+scene/
+# OpenTofu backend config (local, per-machine)
+backend.hcl

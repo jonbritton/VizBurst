@@ -1,0 +1,87 @@
+name: ci
+
+# Validation only — this workflow needs zero AWS access. The AMI pipeline
+# (ami-build.yaml) is the only workflow that assumes the OIDC role.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Lint Python
+        run: |
+          pip install ruff
+          ruff check devopsctl/ deadline/
+
+      - name: Shellcheck scripts
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q shellcheck
+          shellcheck scripts/*.sh
+
+      - name: Lint Ansible
+        # Warn-only until the roles have real studio values filled in.
+        continue-on-error: true
+        run: |
+          pip install ansible-lint
+          ansible-lint ansible/
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run tests
+        run: |
+          pip install pytest
+          pytest devopsctl/ -v || ([ $? -eq 5 ] && echo "No tests collected yet — passing" && exit 0)
+
+  tofu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: opentofu/setup-opentofu@v1
+
+      - name: Format check
+        run: tofu fmt -check -recursive terraform/
+
+      - name: Validate (dev + bootstrap)
+        run: |
+          for dir in terraform/environments/dev terraform/bootstrap; do
+            tofu -chdir="$dir" init -backend=false -input=false
+            tofu -chdir="$dir" validate
+          done
+
+  packer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-packer@v3
+
+      - name: Format check
+        run: packer fmt -check packer/
+
+      - name: Validate template
+        run: |
+          packer init packer/
+          packer validate -syntax-only packer/

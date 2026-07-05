@@ -1,0 +1,28 @@
+---
+# DCC installs, driven entirely by the version manifest. Installers are
+# fetched from the installers bucket in cloud builds (vendor licenses forbid
+# committing them) and from the studio file server on-prem.
+
+- name: Set installer staging dir
+  ansible.builtin.set_fact:
+    installer_cache: /tmp/dcc-installers
+
+- name: Create staging dir
+  ansible.builtin.file:
+    path: "{{ installer_cache }}"
+    state: directory
+    mode: "0755"
+
+- name: Install Blender
+  ansible.builtin.include_tasks: blender.yml
+
+- name: Install Houdini
+  ansible.builtin.include_tasks: houdini.yml
+
+- name: Install Nuke
+  ansible.builtin.include_tasks: nuke.yml
+
+- name: Clean staging dir
+  ansible.builtin.file:
+    path: "{{ installer_cache }}"
+    state: absent

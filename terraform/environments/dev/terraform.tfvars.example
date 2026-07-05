@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (gitignored) and fill in the studio-side facts.
+
+# Static public IP of the studio firewall that terminates the VPN.
+studio_public_ip = "203.0.113.10"
+
+# Studio network CIDR(s): must cover the Deadline RCS host, the SideFX and
+# Foundry license servers, and whatever admins SSH from.
+onprem_cidrs = ["192.168.0.0/16"]

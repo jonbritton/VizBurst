@@ -1,0 +1,38 @@
+---
+- name: Fetch Blender {{ blender_version }} from installers bucket
+  when: aws_worker | bool
+  ansible.builtin.command: >
+    aws s3 cp
+    s3://{{ installers_bucket }}/blender/blender-{{ blender_version }}-linux-x64.tar.xz
+    {{ installer_cache }}/blender.tar.xz
+  args:
+    creates: /opt/blender/{{ blender_version }}
+
+# TODO(studio): on-prem fetch from the file server's installer share.
+- name: Fetch Blender from studio file server
+  when: not (aws_worker | bool)
+  ansible.builtin.copy:
+    src: "{{ onprem_installer_path }}/blender/blender-{{ blender_version }}-linux-x64.tar.xz"
+    dest: "{{ installer_cache }}/blender.tar.xz"
+    remote_src: true
+
+- name: Unpack Blender to /opt
+  ansible.builtin.unarchive:
+    src: "{{ installer_cache }}/blender.tar.xz"
+    dest: /opt
+    remote_src: true
+    creates: /opt/blender-{{ blender_version }}-linux-x64
+
+- name: Version-stable path
+  ansible.builtin.file:
+    src: /opt/blender-{{ blender_version }}-linux-x64
+    dest: /opt/blender/{{ blender_version }}
+    state: link
+    force: true
+
+- name: Expose blender on PATH
+  ansible.builtin.file:
+    src: /opt/blender/{{ blender_version }}/blender
+    dest: /usr/local/bin/blender
+    state: link
+    force: true

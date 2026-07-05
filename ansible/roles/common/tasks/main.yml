@@ -1,0 +1,60 @@
+---
+- name: Install base packages
+  ansible.builtin.apt:
+    update_cache: true
+    name:
+      - build-essential
+      - curl
+      - unzip
+      - python3-pip
+      - libgl1 # headless DCC dependencies
+      - libxi6
+      - libxrender1
+      - libxkbcommon0
+      - ocl-icd-libopencl1
+    state: present
+
+- name: Create render user (uid parity with the on-prem farm)
+  ansible.builtin.user:
+    name: "{{ render_user }}"
+    uid: "{{ render_uid }}"
+    shell: /bin/bash
+
+- name: Install AWS CLI v2
+  ansible.builtin.shell: |
+    set -e
+    curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+    unzip -q /tmp/awscliv2.zip -d /tmp
+    /tmp/aws/install
+    rm -rf /tmp/aws /tmp/awscliv2.zip
+  args:
+    creates: /usr/local/bin/aws
+
+- name: Install s5cmd (parallel S3 transfers — the worker pull tool)
+  ansible.builtin.unarchive:
+    src: "https://github.com/peak/s5cmd/releases/download/v{{ s5cmd_version }}/s5cmd_{{ s5cmd_version }}_Linux-64bit.tar.gz"
+    dest: /usr/local/bin
+    remote_src: true
+    include: [s5cmd]
+    creates: /usr/local/bin/s5cmd
+
+- name: Install scratch-volume boot service (cloud only)
+  when: aws_worker | bool
+  block:
+    - name: Install format-scratch script
+      ansible.builtin.copy:
+        src: format-scratch.sh
+        dest: /usr/local/sbin/format-scratch
+        mode: "0755"
+
+    - name: Install scratch systemd unit
+      ansible.builtin.copy:
+        src: scratch.service
+        dest: /etc/systemd/system/scratch.service
+        mode: "0644"
+
+    - name: Enable scratch unit
+      ansible.builtin.systemd:
+        name: scratch.service
+        enabled: true
+        daemon_reload: true

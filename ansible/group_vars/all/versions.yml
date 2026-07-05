@@ -1,0 +1,31 @@
+---
+# THE version manifest — the single place every version that matters is
+# pinned. "The render environment" is defined as a git commit of the
+# playbooks plus this file. Editing it and merging is what triggers an
+# AMI rebuild (see .github/workflows/ami-build.yaml) and an on-prem rollout.
+
+# --- OS-level ---
+nvidia_driver_version: "550" # ubuntu -server driver series
+s5cmd_version: "2.2.2"       # parallel S3 transfer tool
+
+# --- Deadline ---
+deadline_version: "10.4.0.13"
+# On-prem RCS the cloud workers dial home to over the VPN.
+# TODO(studio): set the real private address before the first AMI build.
+rcs_host: "" # the Deadline RCS
+rcs_port: 8080
+
+# --- DCCs (installers live in the installer bucket, keyed by these versions) ---
+houdini_version: "21.0.671"
+blender_version: "5.1.0"
+nuke_version: "15.1v3"
+gdal_version: "3.13.1"
+
+# --- Licensing (reached over the VPN) ---
+# TODO(studio): real hosts before the first cloud render.
+sidefx_license_server: "sesinetd.example.internal"
+foundry_license: "4101@rlm.example.internal"
+
+# --- Identity parity with the on-prem farm ---
+render_user: render
+render_uid: 1000
