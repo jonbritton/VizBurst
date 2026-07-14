@@ -2,7 +2,6 @@
 """Asset/frame movement between the studio and the S3 transfer lane.
 
 Four verbs, matching the four legs of a hybrid render:
-
     push-assets   on-prem  -> S3      (submit time; delta via manifest)
     pull-assets   S3       -> worker  (task start; cached on /scratch)
     push-frames   worker   -> S3      (post task)
